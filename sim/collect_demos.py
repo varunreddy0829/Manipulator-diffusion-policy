@@ -61,6 +61,20 @@ os.makedirs(DATA_DIR, exist_ok=True)
 # =============================================================================
 # SCENE SETUP
 # =============================================================================
+def sample_cube_position():
+    """
+    Sample a random cube position within the robot's reachable workspace.
+    Franka on a table at Z=0.425 can comfortably reach:
+      X: 0.25 to 0.55  (in front of robot)
+      Y: -0.25 to 0.25 (left and right)
+      Z: fixed at 0.448 (on table surface)
+    Avoids the robot base area (X < 0.25) and table edges.
+    """
+    x = np.random.uniform(0.25, 0.55)
+    y = np.random.uniform(-0.25, 0.25)
+    z = 0.448
+    return np.array([x, y, z])
+
 def build_scene():
     world = World(stage_units_in_meters=1.0)
     world.scene.add_ground_plane(size=2.0, color=np.array([0.5, 0.5, 0.5]))
@@ -82,11 +96,11 @@ def build_scene():
     ))
 
     target = world.scene.add(DynamicCuboid(
-        prim_path="/World/TargetCube", name="target_cube",
-        position=np.array([0.4, 0.0, 0.448]),
-        scale=np.array([0.04, 0.04, 0.04]),
-        color=np.array([1.0, 0.2, 0.2]),
-    ))
+    prim_path="/World/TargetCube", name="target_cube",
+    position=sample_cube_position(),   # ← randomized
+    scale=np.array([0.04, 0.04, 0.04]),
+    color=np.array([1.0, 0.2, 0.2]),
+))
 
     world.scene.add(VisualCuboid(
         prim_path="/World/GoalZone", name="goal_zone",
@@ -385,26 +399,28 @@ if __name__ == "__main__":
         if save:
             saved = dataset.save_episode()
             if saved:
-                x = 0.35 + np.random.uniform(-0.05, 0.05)
-                y = np.random.uniform(-0.1, 0.1)
+                # Randomize cube for next episode using same distribution
                 target.set_world_pose(
-                    position=np.array([x, y, 0.448])
+                    position=sample_cube_position()
                 )
                 ee_pos, ee_ori = robot.end_effector.get_world_pose()
                 ee_target_pos  = ee_pos.copy()
                 robot.set_joint_positions(home_joints)
                 remaining = TARGET_DEMOS - dataset.episode_count
-                print(f"Episodes remaining: {remaining}")
+                print(f"Episode {dataset.episode_count}/{TARGET_DEMOS} saved! Cube randomly placed in workspace. Remaining: {remaining}")
 
         if reset:
             dataset.discard_episode()
+            target.set_world_pose(
+                position=sample_cube_position()
+            )
             robot.set_joint_positions(home_joints)
             ee_pos, ee_ori = robot.end_effector.get_world_pose()
             ee_target_pos  = ee_pos.copy()
             print("Reset — starting fresh episode")
 
         if quit_ or dataset.episode_count >= TARGET_DEMOS:
-            print(f"\nDone! {dataset.episode_count} episodes → {SAVE_PATH}")
+            print("Episode discarded. Cube randomly placed in workspace. Ready for next episode.")
             break
 
     simulation_app.close()
